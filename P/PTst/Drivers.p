@@ -74,3 +74,91 @@ machine CanDriver {
 machine TestCanNoRecovery   { start state I { entry { new CanDriver(NONE); } } }
 machine TestCanRecoverOnly  { start state I { entry { new CanDriver(RECOVER_ONLY); } } }
 machine TestCanRecoverStart { start state I { entry { new CanDriver(RECOVER_AND_START); } } }
+
+// ---- aircore mailbox ----
+// Three commands from the Stock gauges page in a row (e.g. marking calibration points). Between copies loop() may
+// run or be stuck in cfgSave(); afterwards loop() runs freely.
+machine AcMailboxDriver {
+  start state Init {
+    entry (queueLen: int) {
+      var rx: machine; var id: int; var k: int;
+      rx = new AircoreRx(queueLen);
+      id = 1;
+      while (id <= 3) {
+        k = 0;
+        while (k < 3) {
+          if ($) { send rx, eAcRadio, (sq = id, id = id); }   // else: copy lost on air
+          if ($) { send rx, eAcLoop; }                       // else: loop() busy (flash write, serial, ...)
+          k = k + 1;
+        }
+        id = id + 1;
+      }
+      k = 0; while (k < 12) { send rx, eAcLoop; k = k + 1; }
+      send rx, eAcEnd;
+    }
+  }
+}
+machine TestAcMailboxSlot  { start state I { entry { new AcMailboxDriver(1); } } }
+machine TestAcMailboxQueue { start state I { entry { new AcMailboxDriver(16); } } }
+
+// ---- automatic roles ----
+machine RolesDriver {
+  start state Init {
+    entry (c: (hub: bool, screens: int, canOn: int, fix: bool)) {
+      var s: seq[machine]; var i: int; var j: int; var r: int; var hubAt: int; var ecuAt: int; var others: seq[machine];
+      i = 0;
+      while (i < c.screens) {
+        s += (i, new RoleScreen((id = i + 1, hasCan = i < c.canOn, fix = c.fix)));
+        i = i + 1;
+      }
+      i = 0;
+      while (i < c.screens) {
+        others = default(seq[machine]); j = 0;
+        while (j < c.screens) { if (j != i) { others += (sizeof(others), s[j]); } j = j + 1; }
+        send s[i], eSetPeers, others; i = i + 1;
+      }
+      hubAt = choose(3); ecuAt = choose(3);       // who powers up first: hub, ECU, screens
+      if (c.hub && hubAt == 0) { announce eSourceOn, 0; }
+      r = 0;
+      while (r < 8) {
+        if (c.hub && r == hubAt && r > 0) { announce eSourceOn, 0; }
+        i = 0;
+        while (i < c.screens) {
+          if (c.hub && r >= hubAt) { send s[i], eLinkData, 0; }
+          if (r >= ecuAt) { send s[i], eCanFrame; }
+          send s[i], eRoleStep;
+          i = i + 1;
+        }
+        r = r + 1;
+      }
+    }
+  }
+}
+machine TestRolesOneScreen        { start state I { entry { new RolesDriver((hub = false, screens = 3, canOn = 1, fix = false)); } } }
+machine TestRolesHubAndCanScreen  { start state I { entry { new RolesDriver((hub = true,  screens = 2, canOn = 1, fix = false)); } } }
+machine TestRolesTwoCanScreens    { start state I { entry { new RolesDriver((hub = false, screens = 2, canOn = 2, fix = false)); } } }
+machine TestRolesHubFixed         { start state I { entry { new RolesDriver((hub = true,  screens = 2, canOn = 2, fix = true)); } } }
+machine TestRolesTwoCanFixed      { start state I { entry { new RolesDriver((hub = false, screens = 3, canOn = 3, fix = true)); } } }
+
+// ---- factory reset button ----
+// The button is held from second 'pressAt' for 'holdS' seconds, released, then pressed again 'gapS' later.
+machine FbDriver {
+  start state Init {
+    entry (timeoutS: int) {
+      var fb: machine; var now: int; var pressAt: int; var holdS: int; var gapS: int; var down: bool;
+      var holds: seq[int]; var gaps: seq[int];
+      holds += (0, 3); holds += (1, 6); holds += (2, 600);    // short, a real 5 s hold, stuck / wedged for 10 min
+      gaps += (0, 2); gaps += (1, 8); gaps += (2, 30);
+      fb = new FactoryButton(timeoutS);
+      pressAt = 1 + choose(14); holdS = choose(holds); gapS = choose(gaps);
+      now = 1;
+      while (now <= 700) {
+        down = (now >= pressAt && now < pressAt + holdS) || now == pressAt + holdS + gapS;
+        send fb, eFbTick, down;
+        now = now + 1;
+      }
+    }
+  }
+}
+machine TestFactoryButton      { start state I { entry { new FbDriver(0); } } }
+machine TestFactoryButtonFixed { start state I { entry { new FbDriver(10); } } }

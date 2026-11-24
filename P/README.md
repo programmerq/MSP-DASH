@@ -20,6 +20,8 @@ Needs .NET 8 and the P tool (`dotnet tool install --global P`).
 | `PSrc/CmdLink.p` | hub `sendCmd()`/`sendShift()`, screen `handleCmd()` (same scheme: hub `/aircore/cmd` -> `aircore.ino applyCmd`) | `CmdExactlyOnce`: a screen that hears any copy of a command acts on it exactly once |
 | `PSrc/Aircore.p` | `aircore.ino` `loop()` / `wantedAngle()` modes | `GaugeHonestWhenLost`: no hub = needle at rest, never a made-up value |
 | `PSrc/Outputs.p` | hub `outputsStep()`, `output_want()`, `outputPinSetup()` | `RelayDropsWhenDataStops`: a signal-driven relay drops out within a bounded time after its data stops |
+| `PSrc/AircoreMailbox.p` | `aircore.ino` `handlePacket()` single slot `s_cmdRx`/`s_cmdNew`, `loop()`, `applyCmd()` seq check | `AircoreCmdNotLost`: every command the board heard is applied exactly once |
+| `PSrc/FactorySetup.p` | screens `autoRoleStep()` / `espnow_link_become_main()`; screens `factoryButtonStep()` and hub `hubFactoryButton()` | `SingleDataSource` (liveness): one data source settles (the hub, else one main); `NoResetWhileDriving`: no factory reset after 60 s |
 | `PSrc/Can.p` | hub TWAI setup (`twai_driver_install` + `twai_start` only) | `EcuDataReturns` (liveness): after a bus fault clears, ECU data comes back |
 
 ## Findings (tcFail*)
@@ -50,10 +52,35 @@ Needs .NET 8 and the P tool (`dotnet tool install --global P`).
    a modulus of 2 to show the mechanism. It goes away with the fix for finding 1 if the boot id is also bumped on
    wrap, or by keeping a small window of recent seqs.
 
+7. **`tcFailAcMailboxSlot` — aircore loses a command when two arrive before `loop()` runs.** The receive callback
+   overwrites the single slot. If `loop()` is held up (a `cfgSave()` flash write after a calibration op, a serial
+   command) while the page sends the next command, the earlier one is never applied. Counterexample: commands 1, 2,
+   3 in a row; command 2's copies all land while `loop()` is busy and command 3 overwrites them. Losing a "mark this
+   number" calibration step is the practical case. *Fix (`tcPassAcMailboxQueue`):* a FreeRTOS queue (`xQueueSend`
+   from the callback, drain it in `loop()`); the seq check still drops the repeats.
+8. **`tcFailRolesHubAndCanScreen` — a screen with CAN wired can become main next to a hub.** Automatic role picks
+   main as soon as a CAN frame arrives before any ESP-NOW data. If the ECU is up before the hub's first packet
+   (the hub is still booting / joining Wi-Fi), the screen becomes main. As main its receive callback is `onHello`,
+   which ignores data packets, so it never notices the hub: two sources stay on the air until the next power-up,
+   the remotes take values from both, and the main screen never gets hub-only signals (EGT, fuel, GPS, IMU,
+   custom). Only matters when a screen has its own CAN transceiver in a hub system.
+9. **`tcFailRolesTwoCanScreens` — two screens with CAN both become main (screens-only system).** Both see the ECU
+   at power-up before either has sent anything, both pick main, neither ever yields.
+   *Fix for 8 and 9 (`tcPassRolesHubYield`, `tcPassRolesTwoCanYield`):* a main keeps listening for LinkPackets and
+   goes back to remote when it hears the hub (`LINK_COUNT_FROM_HUB`) or a main with a lower MAC. (A short quiet
+   period before taking main narrows the window but does not close it.)
+10. **`tcFailFactoryButtonStuck` — the "only right after power-up" reset can fire while driving.** State 2 ("let go")
+    has no time limit, on the screens and on the hub. A BOOT/page button held or stuck down from power-up (a
+    wedged button, something resting on it, a shorted wire) keeps it in state 2; when it frees itself any time later,
+    the next page-button press within 10 s wipes the board. Counterexample: pressed at 2 s, held 600 s, pressed again
+    8 s after release: reset at 609 s. *Fix (`tcPassFactoryButtonTimeout`):* leave state 2 for "cancelled" after
+    ~10 s.
+
 ## Not modelled (worth a later pass)
 
-- Aircore's single-slot command mailbox (`s_cmdRx` / `s_cmdNew`): a second command arriving before `loop()` takes
-  the first (e.g. while `cfgSave()` writes flash) overwrites it.
+- Settings backup/restore and save crash-recovery; OLED warning priority.
+- The screens' factory reset and restore web routes need the X-MSP header, the hub's routes do not (any device on
+  the car's network can wipe the hub).
 - Unauthenticated ESP-NOW and web/OTA: any device in range can send these packets. The model assumes only the hub
   sends; with spoofing, every spec above can be violated at will.
 - Factory setup / role assignment, settings save crash-recovery, OLED warning priority.

@@ -51,3 +51,39 @@ spec EcuDataReturns observes eFaultCleared, eEcuRx {
     ignore eFaultCleared;
   }
 }
+
+// Every command the aircore board heard is acted on, exactly once.
+spec AircoreCmdNotLost observes eAcHeard, eAcApplied, eAcFinished {
+  var heard: set[int]; var applied: set[int];
+  start state Watch {
+    on eAcHeard do (id: int) { heard += (id); }
+    on eAcApplied do (id: int) {
+      assert !(id in applied), format("aircore applied command {0} twice", id);
+      applied += (id);
+    }
+    on eAcFinished do {
+      var id: int;
+      foreach (id in heard) { assert id in applied, format("aircore heard command {0} but never applied it (mailbox overwritten)", id); }
+    }
+  }
+}
+
+// Liveness: the system settles on ONE source of gauge data: the hub if it is there, else one main screen.
+spec SingleDataSource observes eSourceOn, eSourceOff {
+  var srcs: set[int];
+  start state Settled {
+    on eSourceOn do (id: int) { srcs += (id); if (sizeof(srcs) > 1) { goto Conflict; } }
+    on eSourceOff do (id: int) { srcs -= (id); }
+  }
+  hot state Conflict {
+    on eSourceOn do (id: int) { srcs += (id); }
+    on eSourceOff do (id: int) { srcs -= (id); if (sizeof(srcs) <= 1) { goto Settled; } }
+  }
+}
+
+// A factory reset can only happen in the setup window after power-up, never while driving (here: after 60 s).
+spec NoResetWhileDriving observes eFactoryReset {
+  start state Watch {
+    on eFactoryReset do (now: int) { assert now <= 60, format("factory reset at {0} s after power-up (driving)", now); }
+  }
+}
