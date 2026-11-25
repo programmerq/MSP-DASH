@@ -18,6 +18,7 @@ test tcPassRolesOneScreen [main = TestRolesOneScreen]: assert SingleDataSource i
 test tcPassRolesHubYield [main = TestRolesHubFixed]: assert SingleDataSource in (union RolesM, { TestRolesHubFixed });
 test tcPassRolesTwoCanYield [main = TestRolesTwoCanFixed]: assert SingleDataSource in (union RolesM, { TestRolesTwoCanFixed });
 test tcPassFactoryButtonTimeout [main = TestFactoryButtonFixed]: assert NoResetWhileDriving in (union FbM, { TestFactoryButtonFixed });
+test tcPassPageFlagsWithQueue [main = TestAcMailboxQueue]: assert PageFlagsLostCmd in (union AcMailboxM, { TestAcMailboxQueue });
 
 // Expected FAIL against the current firmware (each is a finding)
 test tcFailCmdHubReboot [main = TestCmdHubReboot]: assert CmdExactlyOnce in (union CmdLink, { TestCmdHubReboot });
@@ -31,3 +32,4 @@ test tcFailAcMailboxSlot [main = TestAcMailboxSlot]: assert AircoreCmdNotLost in
 test tcFailRolesHubAndCanScreen [main = TestRolesHubAndCanScreen]: assert SingleDataSource in (union RolesM, { TestRolesHubAndCanScreen });
 test tcFailRolesTwoCanScreens [main = TestRolesTwoCanScreens]: assert SingleDataSource in (union RolesM, { TestRolesTwoCanScreens });
 test tcFailFactoryButtonStuck [main = TestFactoryButton]: assert NoResetWhileDriving in (union FbM, { TestFactoryButton });
+test tcFailPageMissesLostCmd [main = TestAcMailboxSlot]: assert PageFlagsLostCmd in (union AcMailboxM, { TestAcMailboxSlot });

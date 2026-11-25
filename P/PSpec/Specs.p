@@ -61,7 +61,7 @@ spec AircoreCmdNotLost observes eAcHeard, eAcApplied, eAcFinished {
       assert !(id in applied), format("aircore applied command {0} twice", id);
       applied += (id);
     }
-    on eAcFinished do {
+    on eAcFinished do (warned: bool) {
       var id: int;
       foreach (id in heard) { assert id in applied, format("aircore heard command {0} but never applied it (mailbox overwritten)", id); }
     }
@@ -85,5 +85,20 @@ spec SingleDataSource observes eSourceOn, eSourceOff {
 spec NoResetWhileDriving observes eFactoryReset {
   start state Watch {
     on eFactoryReset do (now: int) { assert now <= 60, format("factory reset at {0} s after power-up (driving)", now); }
+  }
+}
+
+// The hub page's confirmation (hub 68/69) should tell the user about any command the board heard but did not apply.
+spec PageFlagsLostCmd observes eAcHeard, eAcApplied, eAcFinished {
+  var heard: set[int]; var applied: set[int];
+  start state Watch {
+    on eAcHeard do (id: int) { heard += (id); }
+    on eAcApplied do (id: int) { applied += (id); }
+    on eAcFinished do (warned: bool) {
+      var id: int;
+      foreach (id in heard) {
+        assert (id in applied) || warned, format("command {0} was lost and the page still showed it as confirmed", id);
+      }
+    }
   }
 }

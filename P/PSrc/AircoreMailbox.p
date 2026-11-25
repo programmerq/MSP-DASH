@@ -12,14 +12,17 @@ event eAcLoop;                          // loop() gets to run once
 event eAcEnd;                           // test end marker (after enough loop runs)
 event eAcHeard : int;                   // announced: the callback got command 'id'
 event eAcApplied : int;                 // announced: applyCmd() acted on 'id'
-event eAcFinished;                      // announced: test end reached the board
+event eAcFinished : bool;               // announced: test end reached the board; payload = the hub page shows a warning
+// Hub 68/69 (hub_pages.h): the Stock gauges page keeps ONE pending seq per board (pend[mac] = the newest command)
+// and warns "unconfirmed" if the board's reported last seq is not that one after 1.5 s (cleared after 8 s).
 
 machine AircoreRx {
-  var cap: int; var q: seq[(sq: int, id: int)]; var lastSq: int;
+  var cap: int; var q: seq[(sq: int, id: int)]; var lastSq: int; var newestSent: int;
   start state Run {
     entry (queueLen: int) { cap = queueLen; lastSq = 0; }
     on eAcRadio do (c: (sq: int, id: int)) {
       announce eAcHeard, c.id;
+      if (c.sq > newestSent) { newestSent = c.sq; }       // stands in for the page's pend[mac] (newest command)
       if (cap == 1) {                                   // LOCK(); memcpy(&s_cmdRx...); s_cmdNew = true;
         if (sizeof(q) == 1) { q -= (0); }
         q += (0, c);
@@ -33,6 +36,6 @@ machine AircoreRx {
       lastSq = c.sq;
       announce eAcApplied, c.id;
     }
-    on eAcEnd do { announce eAcFinished; }
+    on eAcEnd do { announce eAcFinished, lastSq != newestSent; }   // status reports s_lastSeq
   }
 }

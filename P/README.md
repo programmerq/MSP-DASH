@@ -76,7 +76,29 @@ Needs .NET 8 and the P tool (`dotnet tool install --global P`).
     8 s after release: reset at 609 s. *Fix (`tcPassFactoryButtonTimeout`):* leave state 2 for "cancelled" after
     ~10 s.
 
+11. **`tcFailPageMissesLostCmd` — the hub 68/69 "applied" confirmation cannot see finding 7.** The Stock gauges
+    page now checks the board's reported last seq, but it keeps only one pending command per board (the newest).
+    When command 2 is lost and command 3 lands, the page shows "applied command 3" and no warning: the lost
+    calibration step goes unnoticed. With a queue on the board (`tcPassPageFlagsWithQueue`) nothing is lost; or the
+    page can keep every pending seq per board and warn on each one.
+
+## Upstream re-check (main at bf88c62: hub 69, aircore 11, build 245)
+
+None of findings 1-10 is fixed upstream; the code each one rests on (`sendCmd`/`handleCmd` seq check, aircore
+modes, `outputsStep`, TWAI setup, aircore `s_cmdRx` slot, `autoRoleStep`, `factoryButtonStep`/`hubFactoryButton`)
+is unchanged. Upstream adds:
+- Hub 66-69: status/command confirmation on the Stock gauges page (finding 11 above), short-packet tolerance for
+  older aircore boards (length-checked copy: fine).
+- Aircore 11: a channel scan (13 channels x 300 ms, keep the loudest) that restarts whenever fewer than 8 hub
+  packets/s arrive over 4 s. Not modelled yet. Two things to know: during a scan the board is deaf for ~3.9 s, so
+  the needles drop to rest (`LOST_MS` 1.5 s) and any command sent then is missed; and heavy packet loss on the
+  right channel (interference, a weak link while driving) looks the same as a wrong channel, so a marginal link
+  turns into needles dropping to zero for ~4 s every ~9 s instead of an occasional missed update.
+- Build 245: compile-time `lv_conf.h` checks; hardware/KiCad files. No model impact.
+
 ## Not modelled (worth a later pass)
+
+- The aircore 11 channel scan (above).
 
 - Settings backup/restore and save crash-recovery; OLED warning priority.
 - The screens' factory reset and restore web routes need the X-MSP header, the hub's routes do not (any device on
