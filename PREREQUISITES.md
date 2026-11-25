@@ -35,17 +35,12 @@ arduino-cli core install esp32:esp32@3.3.11
 
 # --- 4. Install required libraries ---
 arduino-cli lib install "GFX Library for Arduino"
-arduino-cli lib install lvgl
+arduino-cli lib install lvgl@8.4.0
 
-# --- 5. Set up lv_conf.h (checks for OneDrive-redirected Documents first - common on machines where OneDrive Known Folder Move is active) ---
-$libPath = if (Test-Path "$env:USERPROFILE\OneDrive\Documents\Arduino\libraries\lvgl") {
-    "$env:USERPROFILE\OneDrive\Documents\Arduino\libraries"
-} else {
-    "$env:USERPROFILE\Documents\Arduino\libraries"
-}
-# Switch it on (LVGL 8.4's template says "Set it to"; older ones "Set this to") and turn on the fonts the screens use
-if (-not (Test-Path "$libPath\lv_conf.h")) { Copy-Item "$libPath\lvgl\lv_conf_template.h" "$libPath\lv_conf.h" }
-(Get-Content "$libPath\lv_conf.h") -replace '^#if 0 /\*\s*Set (it|this) to "1" to enable content\s*\*/', '#if 1 /*Set it to "1" to enable content*/' -replace '^#define LV_FONT_MONTSERRAT_(28|36|48)\s+0', '#define LV_FONT_MONTSERRAT_$1 1' | Set-Content "$libPath\lv_conf.h"
+# --- 5. lv_conf.h: the project's own copy (Waveshare's settings for this display + the big Montserrat fonts) ---
+# (checks for OneDrive-redirected Documents first - common on machines where OneDrive Known Folder Move is active)
+$libPath = if (Test-Path "$env:USERPROFILE\OneDrive\Documents\Arduino\libraries\lvgl") { "$env:USERPROFILE\OneDrive\Documents\Arduino\libraries" } else { "$env:USERPROFILE\Documents\Arduino\libraries" }
+Copy-Item "C:\Users\alejo\OneDrive\GIT\MSP-DASH\lvgl-config\lv_conf.h" "$libPath\lv_conf.h" -Force   # never the template: it compiles but the colours come out wrong
 
 Write-Host "Setup complete. Library path used: $libPath"
 ```

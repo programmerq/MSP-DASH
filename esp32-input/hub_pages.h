@@ -981,15 +981,18 @@ function live(g){const id=key(g).replace(/[^A-Za-z0-9]/g,""),u=g.name==="tach"?"
  const t=$("pt"+id);if(t.innerHTML!==pts)t.innerHTML=pts;}
 let ups={};
 function boardLive(g){const id=g.mac.replace(/:/g,""),e=$("bs"+id);if(!e)return;
- const p=pend[g.mac],late=p&&g.seq!==p.seq&&Date.now()-p.t>1500;if(p&&g.seq===p.seq)delete pend[g.mac];
- const restarted=ups[g.mac]!==undefined&&g.up<ups[g.mac];ups[g.mac]=g.up;if(restarted)ups["r"+g.mac]=Date.now();
- const age=g.age>1500?" | not heard for "+(g.age/1000).toFixed(0)+" s":"";
+ if(pend[g.mac]&&Date.now()-pend[g.mac].t>8000)delete pend[g.mac];   // an old warning (say, from before the board restarted) goes away
+ const p=pend[g.mac],late=p&&g.seq!==p.seq&&Date.now()-p.t>1500;
+ if(p&&g.seq===p.seq){delete pend[g.mac];$("msg").style.color="#7fdf7f";$("msg").textContent="Board "+g.mac+" applied command "+g.seq;clearTimeout(boardLive.t);boardLive.t=setTimeout(()=>{$("msg").textContent="";$("msg").style.color="";},3000);}
+ // both gauges report the board's uptime, a second apart at most: a restart is a drop of more than 5 s
+ const restarted=ups[g.mac]!==undefined&&g.up+5<ups[g.mac];ups[g.mac]=Math.max(g.up,restarted?0:(ups[g.mac]||0));if(restarted){ups[g.mac]=g.up;ups["r"+g.mac]=Date.now();}
+ const age=g.age>4000?" | not heard for "+(g.age/1000).toFixed(0)+" s":"";
  e.textContent="Up "+Math.floor(g.up/60)+" min "+(g.up%60)+" s"+age+(late?" | last command not confirmed: press again":"")+(Date.now()-(ups["r"+g.mac]||0)<20000?" | it RESTARTED":"");
  e.style.color=(age||late||Date.now()-(ups["r"+g.mac]||0)<20000)?"#ff8080":"#888";}
 async function poll(){try{const d=await (await fetch("/aircore.json")).json();G=d.gauges;
  const sig=G.map(g=>key(g)+":"+g.min+":"+g.max).join("|");
- if(!G.length){$("gauges").innerHTML='<p class="note">No gauge board heard. It needs aircore build 7 or later and the hub\'s data (same channel).</p>';built="";return;}
+ if(!G.length){$("gauges").innerHTML='<p class="note">No gauge board heard. It needs aircore build 7 or later and the hub\'s data (same channel). Status packets heard since the hub started: '+(d.rx||0)+(d.short?', '+d.short+' too short (update the gauge board)':'')+'. On the gauge board, <b>show</b> says how many it sent and how many failed.</p>';built="";return;}
  if(sig!==built){const macs=[...new Set(G.map(g=>g.mac))];$("gauges").innerHTML=macs.map(m=>boardCard(G.find(g=>g.mac===m))+G.filter(g=>g.mac===m).map(card).join("")).join("");built=sig;}
- G.forEach(live);G.forEach(boardLive);}catch(e){}}
+ G.forEach(live);G.filter((g,i)=>G.findIndex(x=>x.mac===g.mac)===i).forEach(boardLive);}catch(e){}}   // one board line per board
 poll();setInterval(poll,500);
 </script></body></html>)HTML";

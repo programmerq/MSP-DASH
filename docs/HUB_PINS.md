@@ -66,6 +66,7 @@ Analog-capable GPIOs (ADC1): 32-36 and 39 (all taken by default; move a role to 
 |---|---|
 | L6 | 3.3 V: CC1101, OLED, MPU6050, MCP23017, ADS1115 (never 5 V to the CC1101 or on the I2C bus) |
 | L24 | 5 V: GPS power |
+| L19, R6, R12 | GND (confirmed on the Freenove board's silkscreen) |
 | R9 / R10 | GPIO 1 / 3: USB serial (uploads, serial monitor) - do not use |
 | (none) | GPIO 6-11: the flash chip - not usable |
 

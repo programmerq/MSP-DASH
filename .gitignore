@@ -28,3 +28,7 @@ esp32-input/can_parsing.h
 esp32-input/can_flags.h
 esp32-input/gauge_config.h
 esp32-input/link_packets.h
+tools/__pycache__/
+hardware/*/logs/
+*.kicad_prl
+hardware/*/*-backups/

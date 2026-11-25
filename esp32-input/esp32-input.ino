@@ -55,7 +55,7 @@
 #include "hub_pages.h"     // the web pages (kept out of the .ino on purpose, see the file)
 #include "simulator.h"     // copied in at compile time with simulator.cpp: the bench simulator runs here (build 15 on)
 
-#define INPUT_BUILD 65
+#define INPUT_BUILD 69
 #define BOARD_NAME "Input"
 
 // ---- pins (ESP32-D bench) ----
@@ -189,8 +189,10 @@ static portMUX_TYPE s_scrMux = portMUX_INITIALIZER_UNLOCKED;
 typedef struct { bool used; uint8_t mac[6]; uint8_t gauge; uint32_t lastMs; AcStatus st; } AcSlot;
 static AcSlot s_ac[AC_SLOTS];
 static portMUX_TYPE s_acMux = portMUX_INITIALIZER_UNLOCKED;
-static void acStatusIn(const uint8_t *mac, const uint8_t *data) {
-  const AcStatus *st = (const AcStatus *)data;
+static volatile uint32_t s_acRx = 0, s_acShort = 0;   // gauge-board status packets heard; too short to use
+static void acStatusIn(const uint8_t *mac, const uint8_t *data, int len) {
+  AcStatus tmp; memset(&tmp, 0, sizeof tmp); memcpy(&tmp, data, len < (int)sizeof tmp ? len : sizeof tmp);   // older boards send less
+  const AcStatus *st = &tmp; s_acRx++;
   portENTER_CRITICAL(&s_acMux);
   int slot = -1, oldest = 0;
   for (int i = 0; i < AC_SLOTS; i++) {
@@ -204,7 +206,10 @@ static void acStatusIn(const uint8_t *mac, const uint8_t *data) {
 }
 
 static void onEspNowRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-  if (len >= (int)sizeof(AcStatus) && ((const AcStatus *)data)->magic == AC_STATUS_MAGIC) { acStatusIn(info->src_addr, data); return; }
+  if (len >= 4 && ((const AcStatus *)data)->magic == AC_STATUS_MAGIC) {   // the gauge board (aircore 7 sends 4 bytes less than 8)
+    if (len >= (int)offsetof(AcStatus, upS)) acStatusIn(info->src_addr, data, len); else s_acShort++;
+    return;
+  }
   if (len < (int)offsetof(HelloPacket, name) || ((const HelloPacket *)data)->magic != HELLO_MAGIC) return;
   HelloPacket h; memset(&h, 0, sizeof h); memcpy(&h, data, len < (int)sizeof h ? len : sizeof h);
   portENTER_CRITICAL(&s_scrMux);
@@ -1219,7 +1224,7 @@ static void setupWeb() {
       for (int k = 0; k < t.npts && k < AC_POINTS; k++) { snprintf(b, sizeof b, "%s[%g,%.1f]", k ? "," : "", t.pv[k], t.pa[k]); j += b; }
       j += "]}";
     }
-    j += "]}";
+    j += "],\"rx\":" + String(s_acRx) + ",\"short\":" + String(s_acShort) + "}";
     server.send(200, "application/json", j);
   });
   server.on("/aircore/cmd", HTTP_GET, []() {   // mac=AA:BB:..&g=0&op=N&a=..&b=..

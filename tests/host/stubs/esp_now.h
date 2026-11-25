@@ -7,4 +7,6 @@ typedef void (*esp_now_recv_cb_t)(const esp_now_recv_info_t *, const uint8_t *, 
 inline int esp_now_init(void) { return 0; }
 inline int esp_now_register_recv_cb(esp_now_recv_cb_t) { return 0; }
 inline int esp_now_add_peer(const esp_now_peer_info_t *) { return 0; }
+typedef int esp_err_t;
+#define ESP_ERR_ESPNOW_NOT_FOUND 0x306a
 inline int esp_now_send(const uint8_t *, const uint8_t *, size_t) { return 0; }

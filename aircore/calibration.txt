@@ -1,0 +1,32 @@
+# Gauge board settings, sent line by line by configure.ps1 (lines starting with # are skipped).
+# Save the board's current settings into this file with:  configure.ps1 -Port COM6 -Save
+pwm 40000
+decay slow
+tach strength 1
+tach slew 360
+tach min 0
+tach max 8000
+tach clearpoints
+tach point 0 0
+tach point 1000 27
+tach point 2000 57
+tach point 3000 90
+tach point 4000 121
+tach point 5000 153
+tach point 6000 185
+tach point 7000 217
+tach point 8000 257
+speedo strength 1
+speedo slew 360
+speedo min 0
+speedo max 150
+speedo clearpoints
+speedo point 0 0
+speedo point 20 26
+speedo point 40 63
+speedo point 60 102
+speedo point 80 135
+speedo point 100 172
+speedo point 120 210
+speedo point 140 244
+speedo point 150 262
